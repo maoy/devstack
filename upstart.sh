@@ -131,6 +131,7 @@ function upstart_uninstall {
         # first, generate ${BIN_NAME}.conf and put in/etc/init
         sudo rm -f /etc/init.d/$BIN_NAME
         sudo rm -f /etc/init/$BIN_NAME.conf
+        echo "$BIN_NAME is uninstalled."
     fi
 }
 
