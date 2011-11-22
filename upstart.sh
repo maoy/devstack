@@ -240,6 +240,7 @@ upstart_install n-sch nova-scheduler $NOVA_DIR
 #    screen_it n-vnc "cd $NOVNC_DIR && ./utils/nova-wsproxy.py --flagfile $NOVA_DIR/bin/nova.conf --web . 6080"
 #fi
 upstart_install n-vnc nova-novnc $NOVNC_DIR
+sudo sed -e "s,%NOVA_DIR%,$NOVA_DIR,g" -i /etc/init/nova-novnc.conf
 if [[ "$ENABLED_SERVICES" =~ "horizon" ]]; then
     #screen_it horizon "cd $HORIZON_DIR && sudo tail -f /var/log/apache2/error.log"
     #do nothing 
