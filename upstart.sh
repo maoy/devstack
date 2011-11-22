@@ -91,7 +91,6 @@ SYSLOG=${SYSLOG:-False}
 # sudo privileges and runs as that user.
 
 if [[ $EUID -eq 0 ]]; then
-    ROOTSLEEP=${ROOTSLEEP:-10}
     echo "You are running this script as root. Don't. Use the user created by stack.sh instead."
     exit 1
 fi
@@ -121,43 +120,17 @@ ENABLED_SERVICES=${ENABLED_SERVICES:-g-api,g-reg,key,n-api,n-cpu,n-net,n-sch,n-v
 set -o xtrace
 
 
-# Install upstart
+# Install upstart scripts
 # ================
 #
-
-
-
-# Launch Services
-# ===============
-
-# nova api crashes if we start it with a regular screen command,
-# so send the start command by forcing text into the window.
-# Only run the services specified in ``ENABLED_SERVICES``
-
-# our screen helper to launch a service in a hidden named screen
-function screen_it {
-    NL=`echo -ne '\015'`
-    if [[ "$ENABLED_SERVICES" =~ "$1" ]]; then
-        if [[ "$USE_TMUX" =~ "yes" ]]; then
-            tmux new-window -t stack -a -n "$1" "bash"
-            tmux send-keys "$2" C-M
-        else
-            screen -S stack -X screen -t $1
-            # sleep to allow bash to be ready to be send the command - we are
-            # creating a new window in screen and then sends characters, so if
-            # bash isn't running by the time we send the command, nothing happens
-            sleep 1
-            screen -S stack -p $1 -X stuff "$2$NL"
-        fi
-    fi
-}
+# Only install the services specified in ``ENABLED_SERVICES``
 
 function upstart_install {
-    SHORT_NAME=$1
-    BIN_NAME=$2
-    SERVICE_DIR=$3
+    SHORT_NAME=$1 # e.g. n-cpu
+    BIN_NAME=$2 # e.g. nova-api
+    SERVICE_DIR=$3 # e.g. $NOVA_DIR
     if [[ "$ENABLED_SERVICES" =~ "$SHORT_NAME" ]]; then
-        # first, generate ${BIN_NAME}.conf to /etc/init
+        # first, generate ${BIN_NAME}.conf and put in/etc/init
         sudo cp -f $FILES/upstart/init/$BIN_NAME.conf /etc/init/
         sudo sed -e "s,%USER%,$USER,g" -i /etc/init/$BIN_NAME.conf
         sudo sed -e "s,%DIR%,$SERVICE_DIR,g" -i /etc/init/$BIN_NAME.conf
@@ -168,11 +141,6 @@ function upstart_install {
     fi
 }
 
-# create a new named screen to run processes in
-#screen -d -m -S stack -t stack
-sleep 1
-
-
 if [[ "$ENABLED_SERVICES" =~ "n-sch" ||
       "$ENABLED_SERVICES" =~ "n-api" ||
       "$ENABLED_SERVICES" =~ "n-cpu" ||
@@ -182,73 +150,27 @@ if [[ "$ENABLED_SERVICES" =~ "n-sch" ||
     # if we have any nova service, we want to get rid of --nodaemon line
     sed '/nodaemon/d' -i $NOVA_DIR/bin/nova.conf
 fi
-# launch the glance registry service
-#if [[ "$ENABLED_SERVICES" =~ "g-reg" ]]; then
-#    screen_it g-reg "cd $GLANCE_DIR; bin/glance-registry --config-file=etc/glance-registry.conf"
-#fi
+# install the glance registry service
 upstart_install g-reg glance-registry $GLANCE_DIR
 
-# launch the glance api and wait for it to answer before continuing
+# install the glance api 
 upstart_install g-api glance-api $GLANCE_DIR
-#if [[ "$ENABLED_SERVICES" =~ "g-api" ]]; then
-#    screen_it g-api "cd $GLANCE_DIR; bin/glance-api --config-file=etc/glance-api.conf"
-#    echo "Waiting for g-api ($GLANCE_HOSTPORT) to start..."
-#    if ! timeout $SERVICE_TIMEOUT sh -c "while ! wget -q -O- http://$GLANCE_HOSTPORT; do sleep 1; done"; then
-#      echo "g-api did not start"
-#      exit 1
-#    fi
-#fi
 
-# launch the keystone and wait for it to answer before continuing
-#if [[ "$ENABLED_SERVICES" =~ "key" ]]; then
-#    screen_it key "cd $KEYSTONE_DIR && $KEYSTONE_DIR/bin/keystone --config-file $KEYSTONE_CONF -d"
-#    echo "Waiting for keystone to start..."
-#    if ! timeout $SERVICE_TIMEOUT sh -c "while ! wget -q -O- http://127.0.0.1:5000; do sleep 1; done"; then
-#      echo "keystone did not start"
-#      exit 1
-#    fi
-#fi
+# install keystone
 upstart_install key keystone $KEYSTONE_DIR
 
-# launch the nova-api and wait for it to answer before continuing
+# install the nova-* services
 upstart_install n-api nova-api $NOVA_DIR
-#if [[ "$ENABLED_SERVICES" =~ "n-api" ]]; then
-#    screen_it n-api "cd $NOVA_DIR && $NOVA_DIR/bin/nova-api"
-#    echo "Waiting for nova-api to start..."
-#    if ! timeout $SERVICE_TIMEOUT sh -c "while ! wget -q -O- http://127.0.0.1:8774; do sleep 1; done"; then
-#      echo "nova-api did not start"
-#      exit 1
-#    fi
-#fi
-
-# Launching nova-compute should be as simple as running ``nova-compute`` but
-# have to do a little more than that in our script.  Since we add the group
-# ``libvirtd`` to our user in this script, when nova-compute is run it is
-# within the context of our original shell (so our groups won't be updated).
-# Use 'sg' to execute nova-compute as a member of the libvirtd group.
-
-#screen_it n-cpu "cd $NOVA_DIR && sg libvirtd $NOVA_DIR/bin/nova-compute"
 upstart_install n-cpu nova-compute $NOVA_DIR
-#screen_it n-vol "cd $NOVA_DIR && $NOVA_DIR/bin/nova-volume"
 upstart_install n-vol nova-volume $NOVA_DIR
-#screen_it n-net "cd $NOVA_DIR && $NOVA_DIR/bin/nova-network"
 upstart_install n-net nova-network $NOVA_DIR
-#screen_it n-sch "cd $NOVA_DIR && $NOVA_DIR/bin/nova-scheduler"
 upstart_install n-sch nova-scheduler $NOVA_DIR
 
-#if [[ "$ENABLED_SERVICES" =~ "n-vnc" ]]; then
-#    screen_it n-vnc "cd $NOVNC_DIR && ./utils/nova-wsproxy.py --flagfile $NOVA_DIR/bin/nova.conf --web . 6080"
-#fi
+# install novnc
 upstart_install n-vnc nova-novnc $NOVNC_DIR
 sudo sed -e "s,%NOVA_DIR%,$NOVA_DIR,g" -i /etc/init/nova-novnc.conf
-if [[ "$ENABLED_SERVICES" =~ "horizon" ]]; then
-    #screen_it horizon "cd $HORIZON_DIR && sudo tail -f /var/log/apache2/error.log"
-    #do nothing 
-    echo 
-fi
 
-# Fin
-# ===
+# horizon doesn't need to be installed separately
 
 
 
