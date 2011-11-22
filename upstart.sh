@@ -183,7 +183,9 @@ upstart_$CMD n-sch nova-scheduler $NOVA_DIR
 upstart_$CMD n-vnc nova-novnc $NOVNC_DIR
 # novnc install has a special replacement
 if [ "$CMD" = "install" ]; then
-    sudo sed -e "s,%NOVA_DIR%,$NOVA_DIR,g" -i /etc/init/nova-novnc.conf
+    if [[ "$ENABLED_SERVICES" =~ "n-vnc" ]]; then
+        sudo sed -e "s,%NOVA_DIR%,$NOVA_DIR,g" -i /etc/init/nova-novnc.conf
+    fi
 fi
 
 
