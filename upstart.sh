@@ -97,6 +97,12 @@ ENABLED_SERVICES=${ENABLED_SERVICES:-g-api,g-reg,key,n-api,n-cpu,n-net,n-sch,n-v
 # ================
 #
 # Only install the services specified in ``ENABLED_SERVICES``
+CMD=$1
+
+if [ "$CMD" = "" ]; then
+    echo "usage: upstart.sh [install|uninstall|start|stop|status]"
+    exit 1
+fi
 
 function upstart_install {
     SHORT_NAME=$1 # e.g. n-cpu
@@ -115,48 +121,71 @@ function upstart_install {
     fi
 }
 
+function upstart_uninstall {
+    # uninstall implies stop?
+    upstart_stop $1 $2 $3
+    SHORT_NAME=$1 # e.g. n-cpu
+    BIN_NAME=$2 # e.g. nova-compute
+    SERVICE_DIR=$3 # e.g. $NOVA_DIR
+    if [[ "$ENABLED_SERVICES" =~ "$SHORT_NAME" ]]; then
+        # first, generate ${BIN_NAME}.conf and put in/etc/init
+        sudo rm -f /etc/init.d/$BIN_NAME
+        sudo rm -f /etc/init/$BIN_NAME.conf
+    fi
+}
+
+function upstart_start {
+    SHORT_NAME=$1 # e.g. n-cpu
+    BIN_NAME=$2 # e.g. nova-compute
+    SERVICE_DIR=$3 # e.g. $NOVA_DIR
+    if [[ "$ENABLED_SERVICES" =~ "$SHORT_NAME" ]]; then
+        sudo service $BIN_NAME start
+    fi
+}
+
+function upstart_stop {
+    SHORT_NAME=$1 # e.g. n-cpu
+    BIN_NAME=$2 # e.g. nova-compute
+    SERVICE_DIR=$3 # e.g. $NOVA_DIR
+    if [[ "$ENABLED_SERVICES" =~ "$SHORT_NAME" ]]; then
+        sudo service $BIN_NAME stop
+    fi
+}
+
+function upstart_status {
+    SHORT_NAME=$1 # e.g. n-cpu
+    BIN_NAME=$2 # e.g. nova-compute
+    SERVICE_DIR=$3 # e.g. $NOVA_DIR
+    if [[ "$ENABLED_SERVICES" =~ "$SHORT_NAME" ]]; then
+        sudo service $BIN_NAME status
+    fi
+}
+
+
 # install the glance registry service
-upstart_install g-reg glance-registry $GLANCE_DIR
+upstart_$CMD g-reg glance-registry $GLANCE_DIR
 
 # install the glance api 
-upstart_install g-api glance-api $GLANCE_DIR
+upstart_$CMD g-api glance-api $GLANCE_DIR
 
 # install keystone
-upstart_install key keystone $KEYSTONE_DIR
+upstart_$CMD key keystone $KEYSTONE_DIR
 
 # install the nova-* services
-upstart_install n-api nova-api $NOVA_DIR
-upstart_install n-cpu nova-compute $NOVA_DIR
-upstart_install n-vol nova-volume $NOVA_DIR
-upstart_install n-net nova-network $NOVA_DIR
-upstart_install n-sch nova-scheduler $NOVA_DIR
+upstart_$CMD n-api nova-api $NOVA_DIR
+upstart_$CMD n-cpu nova-compute $NOVA_DIR
+upstart_$CMD n-vol nova-volume $NOVA_DIR
+upstart_$CMD n-net nova-network $NOVA_DIR
+upstart_$CMD n-sch nova-scheduler $NOVA_DIR
 
 # install novnc
-upstart_install n-vnc nova-novnc $NOVNC_DIR
-sudo sed -e "s,%NOVA_DIR%,$NOVA_DIR,g" -i /etc/init/nova-novnc.conf
-
-
-# Using the cloud
-# ===============
-
-echo ""
-echo ""
-echo ""
-
-# If you installed the horizon on this server, then you should be able
-# to access the site using your browser.
-if [[ "$ENABLED_SERVICES" =~ "horizon" ]]; then
-    echo "horizon is now available at http://$HOST_IP/"
+upstart_$CMD n-vnc nova-novnc $NOVNC_DIR
+# novnc install has a special replacement
+if [ "$CMD" = "install" ]; then
+    sudo sed -e "s,%NOVA_DIR%,$NOVA_DIR,g" -i /etc/init/nova-novnc.conf
 fi
 
-# If keystone is present, you can point nova cli to this server
-if [[ "$ENABLED_SERVICES" =~ "key" ]]; then
-    echo "keystone is serving at http://$HOST_IP:5000/v2.0/"
-    echo "examples on using novaclient command line is in exercise.sh"
-    echo "the default users are: admin and demo"
-    echo "the password: $ADMIN_PASSWORD"
-fi
 
 # indicate how long this took to run (bash maintained variable 'SECONDS')
-echo "upstart.sh completed in $SECONDS seconds."
+# echo "upstart.sh completed in $SECONDS seconds."
 
