@@ -114,9 +114,11 @@ function upstart_install {
         sudo sed -e "s,%USER%,$USER,g" -i /etc/init/$BIN_NAME.conf
         sudo sed -e "s,%DIR%,$SERVICE_DIR,g" -i /etc/init/$BIN_NAME.conf
         sudo sed -e "s,%LOGDIR%,/var/log,g" -i /etc/init/$BIN_NAME.conf
-        # second make symbol link in /etc/init.d/
+        # second, make symbol link in /etc/init.d/
         sudo rm -f /etc/init.d/$BIN_NAME
         sudo ln -s /lib/init/upstart-job /etc/init.d/$BIN_NAME
+        # finally, install logrotate
+        sudo cp -f $FILES/upstart/logrotate.d/$BIN_NAME /etc/logrotate.d/
         echo "$BIN_NAME is installed."
     fi
 }
@@ -128,9 +130,9 @@ function upstart_uninstall {
     BIN_NAME=$2 # e.g. nova-compute
     SERVICE_DIR=$3 # e.g. $NOVA_DIR
     if [[ "$ENABLED_SERVICES" =~ "$SHORT_NAME" ]]; then
-        # first, generate ${BIN_NAME}.conf and put in/etc/init
         sudo rm -f /etc/init.d/$BIN_NAME
         sudo rm -f /etc/init/$BIN_NAME.conf
+        sudo rm -f /etc/logrotate.d/$BIN_NAME
         echo "$BIN_NAME is uninstalled."
     fi
 }
