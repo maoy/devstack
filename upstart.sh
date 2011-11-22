@@ -2,20 +2,18 @@
 
 # **upstart.sh** is an opinionated openstack developer installation.
 
-# This script installs and configures *nova*, *glance*, *horizon* and *keystone*
+# This script installs *nova*, *glance*, *horizon* and *keystone*
 
-# This script allows you to specify configuration options of what git
-# repositories to use, enabled services, network configuration and various
-# passwords.  If you are crafty you can run the script on multiple nodes using
-# shared settings for common resources (mysql, rabbitmq) and build a multi-node
-# developer install.
+# Use this script after you have used stack.sh, and you are satisfied with
+# the configuration, but do not like to run it in screen.
+# What this script does is to create upstart scripts in /etc/init 
+# so that the services are automatically started after the machine boots,
+# and the logs are stored in /var/log.
 
-# To keep this script simple we assume you are running on an **Ubuntu 11.10
-# Oneiric** machine.  It should work in a VM or physical server.  Additionally
-# we put the list of *apt* and *pip* dependencies and other configuration files
-# in this repo.  So start by grabbing this script and the dependencies.
-
-# Learn more and get the most recent version at http://devstack.org
+# upstart.sh works with the following OpenStack services:
+# g-api,g-reg,key,n-api,n-cpu,n-net,n-sch,n-vnc,horizon,mysql,rabbit,openstackx
+# for mysql, rabbit, openstackx, and horizon, the script does nothing but they
+# shoud just work.
 
 # Sanity Check
 # ============
@@ -35,9 +33,9 @@ fi
 # Keep track of the current devstack directory.
 TOP_DIR=$(cd $(dirname "$0") && pwd)
 
-# stack.sh keeps the list of **apt** and **pip** dependencies in external
-# files, along with config templates and other useful files.  You can find these
-# in the ``files`` directory (next to this script).  We will reference this
+# upstart.sh keeps the upstart templates in external files.
+# You can find these in the ``files`` directory (next to this script).  
+# We will reference this
 # directory using the ``FILES`` variable in this script.
 FILES=$TOP_DIR/files
 if [ ! -d $FILES ]; then
@@ -45,26 +43,9 @@ if [ ! -d $FILES ]; then
     exit 1
 fi
 
-
-
 # Settings
 # ========
 
-# This script is customizable through setting environment variables.  If you
-# want to override a setting you can either::
-#
-#     export MYSQL_PASSWORD=anothersecret
-#     ./stack.sh
-#
-# You can also pass options on a single line ``MYSQL_PASSWORD=simple ./stack.sh``
-#
-# Additionally, you can put any local variables into a ``localrc`` file, like::
-#
-#     MYSQL_PASSWORD=anothersecret
-#     MYSQL_USER=hellaroot
-#
-# We try to have sensible defaults, so you should be able to run ``./stack.sh``
-# in most cases.
 #
 # We source our settings from ``stackrc``.  This file is distributed with devstack
 # and contains locations for what repositories to use.  If you want to use other
@@ -75,20 +56,15 @@ fi
 # useful for changing a branch or repository to test other versions.  Also you
 # can store your other settings like **MYSQL_PASSWORD** or **ADMIN_PASSWORD** instead
 # of letting devstack generate random ones for you.
+
+# Actually the only variables we need are DEST and ENABLED_SERVICES, in case you 
+# have customized it.
 source ./stackrc
 
 # Destination path for installation ``DEST``
 DEST=${DEST:-/opt/stack}
 
-# Configure services to syslog instead of writing to individual log files
-SYSLOG=${SYSLOG:-False}
-
-
-
-# OpenStack is designed to be run as a regular user (Horizon will fail to run
-# as root, since apache refused to startup serve content from root user).  If
-# stack.sh is run as root, it automatically creates a stack user with
-# sudo privileges and runs as that user.
+# You should use the regular user that you used for stack.sh to run this script.
 
 if [[ $EUID -eq 0 ]]; then
     echo "You are running this script as root. Don't. Use the user created by stack.sh instead."
@@ -113,12 +89,9 @@ Q_PLUGIN=${Q_PLUGIN:-openvswitch}
 # Specify which services to launch.  These generally correspond to screen tabs
 ENABLED_SERVICES=${ENABLED_SERVICES:-g-api,g-reg,key,n-api,n-cpu,n-net,n-sch,n-vnc,horizon,mysql,rabbit,openstackx}
 
-
-
 # Print the commands being run so that we can see the command that triggers
 # an error.  It is also useful for following along as the install occurs.
-set -o xtrace
-
+# set -o xtrace
 
 # Install upstart scripts
 # ================
@@ -127,7 +100,7 @@ set -o xtrace
 
 function upstart_install {
     SHORT_NAME=$1 # e.g. n-cpu
-    BIN_NAME=$2 # e.g. nova-api
+    BIN_NAME=$2 # e.g. nova-compute
     SERVICE_DIR=$3 # e.g. $NOVA_DIR
     if [[ "$ENABLED_SERVICES" =~ "$SHORT_NAME" ]]; then
         # first, generate ${BIN_NAME}.conf and put in/etc/init
@@ -138,18 +111,10 @@ function upstart_install {
         # second make symbol link in /etc/init.d/
         sudo rm -f /etc/init.d/$BIN_NAME
         sudo ln -s /lib/init/upstart-job /etc/init.d/$BIN_NAME
+        echo "$BIN_NAME is installed."
     fi
 }
 
-if [[ "$ENABLED_SERVICES" =~ "n-sch" ||
-      "$ENABLED_SERVICES" =~ "n-api" ||
-      "$ENABLED_SERVICES" =~ "n-cpu" ||
-      "$ENABLED_SERVICES" =~ "n-vnc" ||
-      "$ENABLED_SERVICES" =~ "n-vol" ||
-      "$ENABLED_SERVICES" =~ "n-net" ]]; then
-    # if we have any nova service, we want to get rid of --nodaemon line
-    sed '/nodaemon/d' -i $NOVA_DIR/bin/nova.conf
-fi
 # install the glance registry service
 upstart_install g-reg glance-registry $GLANCE_DIR
 
@@ -169,10 +134,6 @@ upstart_install n-sch nova-scheduler $NOVA_DIR
 # install novnc
 upstart_install n-vnc nova-novnc $NOVNC_DIR
 sudo sed -e "s,%NOVA_DIR%,$NOVA_DIR,g" -i /etc/init/nova-novnc.conf
-
-# horizon doesn't need to be installed separately
-
-
 
 
 # Using the cloud
