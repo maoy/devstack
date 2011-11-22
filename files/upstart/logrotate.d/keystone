@@ -1,0 +1,4 @@
+/var/log/keystone/api.log {
+    daily
+    missingok
+}
